@@ -75,7 +75,9 @@ STAGE_LIST="stage0 stage1 stage2 stage-kiosk"
 CFG
 
 cd "$WORK/pi-gen"
-PRUNE_STAGES=1 CLEAN=1 setsid ./build.sh -c config &
+# Own UTS namespace with the image's hostname: tools that run in the chroot
+# (ssh-keygen comments, logs) would otherwise record the build host's name.
+PRUNE_STAGES=1 CLEAN=1 setsid unshare --uts sh -c 'hostname rds-kiosk && exec ./build.sh -c config' &
 PIGEN=$!
 
 # Abort before the disk fills: the build host may be doing other work.

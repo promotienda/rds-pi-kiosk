@@ -1,13 +1,17 @@
 "use strict";
 // On-screen start page. With a URL set: wait for the network, then go there.
 // Without one: the welcome screen. Never gives up and never shows a dead end.
-var t0 = Date.now(), local = null, leaving = false, errorSince = 0;
+var t0 = Date.now(), local = null, leaving = false, errorSince = 0, pairClicked = 0;
 function $(id) { return document.getElementById(id); }
 function show(id, on) { $(id).classList.toggle("hide", !on); }
 function getJSON(u, opt) {
   return fetch(u, opt).then(function (r) { return r.json(); });
 }
-function pairBusy(p) { return p && (p.state === "queued" || p.state === "running"); }
+// The root helper picks a request up a second or two after the click; until
+// then the status file still says idle, so count a fresh click as busy.
+function pairBusy(p) {
+  return (p && (p.state === "queued" || p.state === "running")) || Date.now() - pairClicked < 10000;
+}
 
 function render(L) {
   $("ver").textContent = L.version || "";
@@ -63,6 +67,7 @@ function tick() {
 
 $("pairbtn").addEventListener("click", function () {
   if (!local) return;
+  pairClicked = Date.now();
   $("pairbtn").disabled = true;
   fetch("/api/pair", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code: local.code }) }).catch(function () {});

@@ -18,7 +18,7 @@ set -euo pipefail
 cmd=${1:-}
 case "$cmd" in
 up)
-	IMG=$2; W=$3
+	IMG=$2; W=$(realpath -m "$3")
 	mkdir -p "$W/root"
 	if [ ! -f "$W/test.img" ]; then
 		case "$IMG" in
@@ -52,7 +52,7 @@ up)
 	echo "nspawn-boot: up; run commands with: systemd-run -M kiosktest --wait --pipe -q <cmd>"
 	;;
 down)
-	W=$2
+	W=$(realpath -m "$2")
 	machinectl terminate kiosktest 2>/dev/null || true
 	sleep 3
 	umount -R "$W/root" 2>/dev/null || true

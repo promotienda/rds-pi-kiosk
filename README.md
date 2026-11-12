@@ -1,5 +1,8 @@
 # RDS Pi Kiosk
 
+> **Beta.** 0.1.x has been tested in an emulated boot, not yet on Raspberry Pi
+> hardware. Please report problems in Issues.
+
 A free, open-source Raspberry Pi OS image that boots straight into a locked-down,
 full-screen web kiosk. Flash it, set a URL, and plug the Pi into a screen.
 
@@ -13,7 +16,9 @@ screen works, and touchscreens work too. You can use Ethernet or Wi-Fi.
 
 ## Quick start
 
-1. Download `rds-pi-kiosk-<version>-arm64.img.xz` and check its SHA-256.
+1. Download `rds-pi-kiosk-<version>-arm64.img.xz` from
+   [Releases](https://github.com/promotienda/rds-pi-kiosk/releases) and check
+   its SHA-256 (and, once published, its signature: see *Verifying a download*).
 2. Write it to a microSD card (8 GB or larger) with Raspberry Pi Imager
    (*Choose OS → Use custom*) or balenaEtcher. In Imager's OS customisation you
    can set Wi-Fi, a user with a password, and SSH. All of it is optional.
@@ -88,6 +93,26 @@ Security notes:
 - Security updates install automatically: Debian security, plus Chromium from
   the Raspberry Pi archive in free mode. They never touch the kernel, the
   firmware, the bootloader or the RDS agent, and never reboot the Pi.
+
+## Verifying a download
+
+Each release has `<file>.sha256`:
+
+```
+sha256sum -c rds-pi-kiosk-<version>-arm64.img.xz.sha256      # Linux
+shasum -a 256 -c rds-pi-kiosk-<version>-arm64.img.xz.sha256  # macOS
+```
+
+Releases will also carry a [minisign](https://jedisct1.github.io/minisign/)
+signature, `<file>.minisig`. **Signature pending:** the project key has not
+been published yet. When it is, its public key will be here:
+
+```
+RDS Pi Kiosk release key (minisign): PENDING
+```
+
+and you can check a download with
+`minisign -Vm rds-pi-kiosk-<version>-arm64.img.xz -P <public key>`.
 
 ## Building
 
