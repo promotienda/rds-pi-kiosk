@@ -1,0 +1,9 @@
+[Unit]
+Description=RDS Pi Kiosk: Pair with RDS (install the RDS agent)
+Wants=network-online.target
+After=network-online.target rds-kiosk-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/rds-kiosk-pair
+TimeoutStartSec=45min

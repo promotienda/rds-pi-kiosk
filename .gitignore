@@ -1,0 +1,6 @@
+/work/
+/deploy/
+stage-kiosk/02-kiosk/files/version
+stage-kiosk/02-kiosk/files/README.md
+stage-kiosk/02-kiosk/files/LICENSE
+__pycache__/

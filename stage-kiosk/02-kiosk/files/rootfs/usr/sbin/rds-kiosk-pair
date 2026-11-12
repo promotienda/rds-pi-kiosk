@@ -1,0 +1,113 @@
+#!/bin/sh
+# Pair with RDS: install the RDS agent and hand the screen to it.
+# Runs as root from rds-kiosk-pair.service; never run it from the kiosk session.
+#
+#  1. download the public RDS installer (install.sh) over HTTPS;
+#  2. run it: it asks the RDS server for the latest arm64 build, checks the
+#     .deb's SHA-256 against the published value, and installs it with apt;
+#  3. switch to RDS mode: MODE=rds in kiosk.txt, stop the free kiosk, start
+#     rds-agent, which shows the "Link this screen" QR code.
+#
+# Any failure leaves free mode running exactly as it was and puts the reason
+# on the screen. Nothing here ever updates an agent that is already installed:
+# agent updates are the customer's decision, made in RDS.
+set -u
+
+STATUS=/run/rds-pi-kiosk/pair.json
+LOG=/var/log/rds-kiosk-pair.log
+WORK=/var/lib/rds-pi-kiosk/pair
+
+status() {   # state message
+    mkdir -p /run/rds-pi-kiosk
+    python3 -I -c 'import json,sys,time; print(json.dumps({"state":sys.argv[1],"message":sys.argv[2],"ts":int(time.time())}))' \
+        "$1" "$2" > "$STATUS.new" && mv -f "$STATUS.new" "$STATUS"
+    echo "rds-kiosk-pair: [$1] $2"
+}
+
+fail() {
+    status error "$1"
+    echo "rds-kiosk-pair: FAILED: $1" >>"$LOG"
+    # Free mode keeps (or goes back to) the screen.
+    echo free > /var/lib/rds-pi-kiosk/mode
+    systemctl start --no-block rds-kiosk-setup.service rds-kiosk.service >/dev/null 2>&1 || true
+    exit 1
+}
+
+agent_installed() {
+    [ "$(dpkg-query -W -f='${db:Status-Status}' rds-agent 2>/dev/null)" = installed ]
+}
+
+server=$(python3 -I -c 'import sys; sys.path.insert(0,"/usr/lib/rds-pi-kiosk"); import kioskconf as k; print(k.effective()[0]["RDS_SERVER"])' 2>/dev/null)
+case "$server" in https://*) ;; *) server=https://rds.digitalsignagerds.com ;; esac
+
+mkdir -p /run/rds-pi-kiosk
+exec 9>/run/rds-pi-kiosk/pair.lock
+flock -n 9 || { echo "rds-kiosk-pair: already running"; exit 0; }
+
+mkdir -p "$WORK"
+chmod 700 "$WORK"
+: >>"$LOG"; chmod 600 "$LOG"
+echo "==== $(date -Is) pairing with $server" >>"$LOG"
+
+if ! agent_installed; then
+    status running "Waiting for the internet"
+    i=0
+    until curl -fsS --proto '=https' --tlsv1.2 -m 10 -o /dev/null "$server/install.sh"; do
+        i=$((i + 1))
+        [ $i -ge 60 ] && fail "No internet connection: could not reach $server. Check the network cable or Wi-Fi (WIFI_SSID in kiosk.txt) and try again."
+        sleep 10
+    done
+
+    status running "Downloading the RDS installer"
+    curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 --retry 3 \
+        -o "$WORK/install.sh" "$server/install.sh" >>"$LOG" 2>&1 \
+        || fail "Could not download the RDS installer from $server."
+    head -c 2 "$WORK/install.sh" | grep -q '#!' || fail "The RDS server sent something that is not an installer."
+
+    status running "Installing the RDS agent (this can take a few minutes)"
+    if ! RDS_SERVER="$server" timeout 1800 bash "$WORK/install.sh" >>"$LOG" 2>&1; then
+        msg=$(grep -E '^ERROR:' "$LOG" | tail -n1 | cut -c1-300)
+        fail "The RDS installer stopped. ${msg:-See $LOG.}"
+    fi
+    agent_installed || fail "The RDS installer finished but rds-agent is not installed. See $LOG."
+fi
+
+# A partner or test server: tell a brand-new agent where to pair. Only when
+# the agent has no configuration yet -- never touch an existing pairing.
+CFG=/root/.config/rds-agent/config.json
+if [ "$server" != "https://rds.digitalsignagerds.com" ] && [ ! -e "$CFG" ]; then
+    mkdir -p "$(dirname "$CFG")"
+    python3 -I -c 'import json,sys; print(json.dumps({"api_server": sys.argv[1]}))' "$server" > "$CFG"
+    echo "rds-kiosk-pair: agent will pair with $server" >>"$LOG"
+fi
+
+status running "Starting RDS"
+python3 -I -c 'import sys; sys.path.insert(0,"/usr/lib/rds-pi-kiosk"); import kioskconf as k; k.set_values({"MODE":"rds"}, comment="Set by Pair with RDS on '"$(date +%F)"'. MODE=free shows your own URL again.")' >>"$LOG" 2>&1 \
+    || echo "rds-kiosk-pair: could not write MODE=rds to kiosk.txt (continuing)" >>"$LOG"
+echo rds > /var/lib/rds-pi-kiosk/mode
+/usr/sbin/rds-kiosk-apply boot >>"$LOG" 2>&1 || true   # security-only updates in RDS mode, state.json
+systemctl daemon-reload
+systemctl enable rds-agent.service >>"$LOG" 2>&1 || true
+systemctl stop rds-kiosk.service rds-kiosk-setup.service >>"$LOG" 2>&1 || true
+systemctl reset-failed rds-agent.service >/dev/null 2>&1 || true
+systemctl start rds-agent.service >>"$LOG" 2>&1 || true
+
+# The agent must prove it is up, twice, 10 s apart and with the same process:
+# a unit in a crash loop is "active" for a moment on every restart.
+i=0; seen=""
+while [ $i -lt 45 ]; do
+    pid=$(systemctl show -p MainPID --value rds-agent.service 2>/dev/null)
+    if systemctl is-active --quiet rds-agent.service && [ "${pid:-0}" != 0 ] && pgrep -x rds-agent >/dev/null; then
+        if [ -n "$seen" ] && [ "$seen" = "$pid" ]; then
+            status "done" "RDS is running. Scan the QR code on the screen to link it."
+            echo "rds-kiosk-pair: done" >>"$LOG"
+            exit 0
+        fi
+        [ -n "$seen" ] || { seen=$pid; i=$((i + 5)); sleep 10; continue; }
+    fi
+    seen=""
+    i=$((i + 1)); sleep 2
+done
+systemctl stop rds-agent.service >/dev/null 2>&1 || true
+python3 -I -c 'import sys; sys.path.insert(0,"/usr/lib/rds-pi-kiosk"); import kioskconf as k; k.set_values({"MODE":"free"}, comment="Pair with RDS could not start the agent; back to free mode.")' >>"$LOG" 2>&1 || true
+fail "The RDS agent was installed but did not start. Free mode is back; see journalctl -u rds-agent."

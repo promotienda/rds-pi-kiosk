@@ -1,0 +1,18 @@
+#!/bin/sh
+# mode-is free|rds -- exit 0 when that mode is the one in force.
+# Used as ExecCondition by rds-kiosk.service, rds-kiosk-setup.service and the
+# rds-agent.service drop-in, so exactly one of the two kiosks drives the screen.
+# /var/lib/rds-pi-kiosk/mode is written by rds-kiosk-apply. If it is missing
+# or damaged, fall back on what is installed: with rds-agent installed, RDS
+# runs (a paired screen keeps playing); without it, free mode runs.
+want=$1
+m=$(head -c 8 /var/lib/rds-pi-kiosk/mode 2>/dev/null | tr -d '[:space:]')
+case "$m" in
+  free|rds) ;;
+  *) if [ "$(dpkg-query -W -f='${db:Status-Status}' rds-agent 2>/dev/null)" = installed ]; then
+       m=rds
+     else
+       m=free
+     fi ;;
+esac
+[ "$m" = "$want" ]

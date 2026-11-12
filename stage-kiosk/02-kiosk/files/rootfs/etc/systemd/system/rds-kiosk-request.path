@@ -1,0 +1,9 @@
+[Unit]
+Description=RDS Pi Kiosk: watch for setup page requests
+
+[Path]
+DirectoryNotEmpty=/var/lib/rds-pi-kiosk/requests
+MakeDirectory=no
+
+[Install]
+WantedBy=multi-user.target

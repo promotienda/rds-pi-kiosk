@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RDS Pi Kiosk</title><link rel="stylesheet" href="/app.css"></head>
+<body class="screen">
+<div class="wrap">
+  <!-- shown while a URL is set and the network is being checked -->
+  <div id="starting" class="hide">
+    <h1><span class="spin"></span><span id="startmsg">Starting</span></h1>
+    <p class="mut" id="starthost"></p>
+  </div>
+  <!-- shown when no URL is set: the welcome screen -->
+  <div id="welcome" class="hide">
+    <h1>This screen is ready</h1>
+    <p class="mut">Choose what it shows. You can change your mind at any time.</p>
+  </div>
+  <div class="row" id="cards">
+    <div class="card" id="setupcard">
+      <img class="qr hide" id="qr" alt="">
+      <h2>Show your own web page</h2>
+      <p>On a phone or computer on the same network, open:</p>
+      <div class="big" id="setupurl">Waiting for the network…</div>
+      <p>and enter the setup code</p>
+      <div class="code" id="code">--------</div>
+      <p class="mut">Or put <b>URL=https://…</b> in <b>kiosk.txt</b> on the SD card's boot partition.</p>
+    </div>
+    <div class="card" id="rdscard">
+      <h2>Manage it from anywhere with RDS</h2>
+      <ul>
+        <li>Playlists of images, videos and web pages</li>
+        <li>Schedules, many screens, one dashboard</li>
+        <li>Free trial</li>
+      </ul>
+      <p><button id="pairbtn">Pair with RDS</button></p>
+      <p class="mut">Tap the button, or use “Pair with RDS” on the setup page, or put <b>MODE=rds</b> in kiosk.txt.</p>
+      <div id="pairstatus" class="status hide"></div>
+    </div>
+  </div>
+</div>
+<div class="foot">RDS Pi Kiosk <span id="ver"></span> · free and open source · <span id="host"></span> · digitalsignagerds.com</div>
+<script src="/start.js"></script>
+</body></html>

@@ -1,0 +1,18 @@
+# RDS Pi Kiosk. systemd applies presets on the first boot (/etc/machine-id is
+# "uninitialized" in the image); the first matching line wins, and this file
+# sorts before Debian's 90-systemd.preset. Without it, the first boot enables
+# a console login on tty1 under the kiosk, the Raspberry Pi user-rename wizard
+# (which switches the screen to tty8 and waits for a keyboard), an SSH socket,
+# and systemd-networkd beside NetworkManager. Found by booting the 0.1.0 image.
+enable rds-kiosk-config.service
+enable rds-kiosk.service
+enable rds-kiosk-setup.service
+enable rds-kiosk-request.path
+disable getty@.service
+disable userconfig.service
+disable ssh.socket
+disable ssh.service
+disable systemd-networkd.service
+disable systemd-networkd.socket
+disable systemd-networkd-wait-online.service
+disable systemd-network-generator.service

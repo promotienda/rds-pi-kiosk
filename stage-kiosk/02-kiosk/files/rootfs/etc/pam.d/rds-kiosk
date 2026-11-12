@@ -1,0 +1,6 @@
+# PAM session for the free-mode kiosk (rds-kiosk.service). No authentication:
+# systemd starts it; this only opens a logind session so cage gets the seat.
+account  required  pam_unix.so
+session  required  pam_unix.so
+session  optional  pam_loginuid.so
+session  required  pam_systemd.so

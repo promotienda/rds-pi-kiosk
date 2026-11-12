@@ -1,0 +1,44 @@
+# RDS Pi Kiosk settings -- edit this file on any computer, then start the Pi.
+# One setting per line: KEY=VALUE. Lines starting with # are notes.
+# A setting you leave empty uses the default. A setting with a typo is
+# ignored (the screen keeps its last working value) and listed on the setup page.
+
+# The web page to show full screen. Empty = the welcome screen, which shows
+# a setup address and code for your phone or computer.
+URL=
+
+# free = show URL above.  rds = install the RDS agent and pair this screen
+# with RDS (needs the internet; shows a QR code to link it to your account).
+MODE=free
+
+# Screen rotation in degrees: 0, 90, 180 or 270.
+ROTATION=0
+
+# Page zoom: 1.0 = 100 %. Use 1.5 or 2.0 on a 4K TV seen from far away.
+ZOOM=1.0
+
+# Wi-Fi (leave empty for an Ethernet cable). The password is removed from
+# this file once it is saved on the Pi. Country is two letters, e.g. ES, GB, US.
+WIFI_SSID=
+WIFI_PASSWORD=
+WIFI_COUNTRY=
+
+# Time zone, e.g. Europe/Madrid. Empty = UTC.
+TIMEZONE=
+
+# Network name of this screen (letters, digits, '-'). Empty = rds-kiosk.
+HOSTNAME=
+
+# The setup page on your local network: on or off. With off, settings can only
+# be changed in this file.
+SETUP_PAGE=on
+
+# Your own setup code (6-32 letters/digits). Empty = a random one, shown on the screen.
+SETUP_CODE=
+
+# Remote administration: one OpenSSH public key line (ssh-ed25519 AAAA...).
+# Enables SSH with that key only, for the user "kioskadmin". Empty = SSH off.
+SSH_AUTHORIZED_KEY=
+
+# Install security updates automatically (no automatic reboots): yes or no.
+AUTO_SECURITY_UPDATES=yes

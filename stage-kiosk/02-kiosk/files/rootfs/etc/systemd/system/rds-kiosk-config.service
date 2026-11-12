@@ -1,0 +1,15 @@
+[Unit]
+Description=RDS Pi Kiosk: apply kiosk.txt
+Documentation=file:///usr/share/doc/rds-pi-kiosk/README.md
+After=local-fs.target NetworkManager.service systemd-timedated.service
+Before=network-online.target rds-kiosk.service rds-kiosk-setup.service rds-agent.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/rds-kiosk-apply boot
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

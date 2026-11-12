@@ -1,0 +1,20 @@
+{
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "PasswordManagerEnabled": false,
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "TranslateEnabled": false,
+  "MetricsReportingEnabled": false,
+  "PromotionalTabsEnabled": false,
+  "DefaultBrowserSettingEnabled": false,
+  "BackgroundModeEnabled": false,
+  "DownloadRestrictions": 3,
+  "DeveloperToolsAvailability": 2,
+  "PrintingEnabled": false,
+  "ExtensionInstallBlocklist": ["*"],
+  "DefaultNotificationsSetting": 2,
+  "DefaultGeolocationSetting": 2,
+  "URLBlocklist": ["file://*", "chrome://*", "view-source:*", "javascript://*"],
+  "URLAllowlist": ["file:///usr/share/rds-pi-kiosk/www/*"]
+}

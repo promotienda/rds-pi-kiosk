@@ -1,0 +1,366 @@
+#!/usr/bin/python3 -I
+"""Apply kiosk.txt to the system. Runs as root.
+
+  rds-kiosk-apply boot       at every boot (rds-kiosk-config.service)
+  rds-kiosk-apply requests   changes queued by the setup page
+                             (rds-kiosk-request.path -> .service)
+
+Every step is independent and failures are logged, never fatal: whatever goes
+wrong, the screen must still come up showing something.
+"""
+
+import glob
+import json
+import os
+import pwd
+import grp
+import secrets
+import shlex
+import subprocess
+import sys
+import time
+import uuid
+
+sys.path.insert(0, "/usr/lib/rds-pi-kiosk")
+import kioskconf as kc  # noqa: E402
+
+SHARE = "/usr/share/rds-pi-kiosk"
+RUN = "/run/rds-pi-kiosk"
+STATE = kc.STATE_DIR
+REQUESTS = STATE + "/requests"
+CODE_FILE = STATE + "/setup-code"
+MODE_FILE = STATE + "/mode"
+PAIR_STATUS = RUN + "/pair.json"
+ADMIN_USER_FILE = "/etc/rds-pi-kiosk/admin-user"
+VERSION_FILE = "/etc/rds-pi-kiosk/version"
+WIFI_KEYFILE = "/etc/NetworkManager/system-connections/kiosk-wifi.nmconnection"
+CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def log(msg):
+    print("rds-kiosk-apply: " + msg, flush=True)
+
+
+def run(argv, **kw):
+    kw.setdefault("stdout", subprocess.PIPE)
+    kw.setdefault("stderr", subprocess.STDOUT)
+    kw.setdefault("timeout", 60)
+    try:
+        p = subprocess.run(argv, text=True, **kw)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log("%s failed: %s" % (argv[0], e))
+        return 1, ""
+    return p.returncode, (p.stdout or "").strip()
+
+
+def step(name, fn, *a):
+    try:
+        fn(*a)
+    except Exception as e:  # noqa: BLE001 - one bad step must not stop the rest
+        log("step %s failed: %s: %s" % (name, type(e).__name__, e))
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def write(path, text, mode=0o644, owner=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".new"
+    with open(tmp, "w") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    if owner:
+        os.chown(tmp, pwd.getpwnam(owner[0]).pw_uid, grp.getgrnam(owner[1]).gr_gid)
+    os.replace(tmp, path)
+
+
+def agent_installed():
+    rc, out = run(["dpkg-query", "-W", "-f=${db:Status-Status}", "rds-agent"])
+    return rc == 0 and out == "installed"
+
+
+# ── steps ──────────────────────────────────────────────────────────────────
+
+def ensure_kiosk_txt():
+    if not os.path.exists(kc.KIOSK_TXT) and os.path.isdir(os.path.dirname(kc.KIOSK_TXT)):
+        with open(SHARE + "/kiosk.txt.default") as f:
+            kc._atomic_write(kc.KIOSK_TXT, f.read())
+        log("wrote a default %s" % kc.KIOSK_TXT)
+
+
+def apply_hostname(s):
+    want = s["HOSTNAME"]
+    if not want or want == read("/etc/hostname"):
+        return
+    rc, out = run(["raspi-config", "nonint", "do_hostname", want])
+    if rc == 0:
+        run(["hostnamectl", "set-hostname", want])
+        log("hostname set to %s" % want)
+    else:
+        log("could not set hostname: %s" % out)
+
+
+def apply_timezone(s):
+    tz = s["TIMEZONE"]
+    if not tz:
+        return
+    if not os.path.isfile("/usr/share/zoneinfo/" + tz):
+        log("TIMEZONE %s is not a known time zone (ignored)" % tz)
+        return
+    if read("/etc/timezone") == tz:
+        return
+    rc, _ = run(["timedatectl", "set-timezone", tz])
+    if rc != 0:
+        if os.path.lexists("/etc/localtime"):
+            os.unlink("/etc/localtime")
+        os.symlink("/usr/share/zoneinfo/" + tz, "/etc/localtime")
+    write("/etc/timezone", tz + "\n")
+    log("time zone set to %s" % tz)
+
+
+def apply_wifi_country(s):
+    c = s["WIFI_COUNTRY"]
+    if not c:
+        return
+    rc, cur = run(["raspi-config", "nonint", "get_wifi_country"])
+    if rc == 0 and cur.strip() == c:
+        return
+    rc, out = run(["raspi-config", "nonint", "do_wifi_country", c])
+    log("Wi-Fi country %s: %s" % (c, "set" if rc == 0 else "failed: " + out))
+
+
+def _keyfile_str(v):
+    v = v.replace("\\", "\\\\")
+    if v.startswith(" "):
+        v = "\\s" + v[1:]
+    return v
+
+
+def apply_wifi(s):
+    ssid, psk = s["WIFI_SSID"], s["WIFI_PASSWORD"]
+    if not ssid or not psk:
+        return                      # the password is blanked once saved
+    ssid_bytes = ";".join(str(b) for b in ssid.encode()) + ";"
+    text = (
+        "# Written by rds-kiosk-apply from kiosk.txt\n"
+        "[connection]\nid=kiosk-wifi\nuuid=%s\ntype=wifi\nautoconnect=true\n"
+        "autoconnect-priority=10\n\n"
+        "[wifi]\nmode=infrastructure\nssid=%s\n\n"
+        "[wifi-security]\nkey-mgmt=wpa-psk\npsk=%s\n\n"
+        "[ipv4]\nmethod=auto\n\n[ipv6]\naddr-gen-mode=default\nmethod=auto\n"
+    ) % (uuid.uuid4(), ssid_bytes, _keyfile_str(psk))
+    write(WIFI_KEYFILE, text, 0o600)
+    run(["nmcli", "connection", "reload"])
+    run(["nmcli", "--wait", "0", "connection", "up", "kiosk-wifi"])
+    # Saved: take the password out of the FAT file, which anyone holding the
+    # SD card can read. Typing a new one there changes it again.
+    kc.set_values({"WIFI_PASSWORD": ""}, comment="Wi-Fi password for '%s' saved on %s. "
+                  "Type it again here only to change it." % (ssid, time.strftime("%Y-%m-%d")))
+    log("Wi-Fi network '%s' saved" % ssid)
+
+
+def admin_user():
+    u = read(ADMIN_USER_FILE)
+    try:
+        return pwd.getpwnam(u) if u else None
+    except KeyError:
+        return None
+
+
+def apply_ssh_key(s):
+    key = s["SSH_AUTHORIZED_KEY"]
+    if not key:
+        return
+    pw = admin_user()
+    if not pw:
+        log("no admin user; SSH key ignored")
+        return
+    d = os.path.join(pw.pw_dir, ".ssh")
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    os.chown(d, pw.pw_uid, pw.pw_gid)
+    ak = os.path.join(d, "authorized_keys")
+    lines = read(ak).splitlines()
+    if key not in lines:
+        lines.append(key)
+        write(ak, "\n".join(l for l in lines if l) + "\n", 0o600)
+        os.chown(ak, pw.pw_uid, pw.pw_gid)
+        log("SSH key installed for %s" % pw.pw_name)
+    write("/etc/ssh/sshd_config.d/50-rds-pi-kiosk.conf",
+          "# rds-kiosk-apply: SSH_AUTHORIZED_KEY is set in kiosk.txt, so keys only.\n"
+          "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\n")
+    write("/etc/sudoers.d/020-rds-pi-kiosk-admin",
+          "# rds-kiosk-apply: the admin user can only log in with the SSH key from kiosk.txt\n"
+          "%s ALL=(ALL) NOPASSWD: ALL\n" % pw.pw_name, 0o440)
+    rc, _ = run(["systemctl", "is-enabled", "--quiet", "ssh.service"])
+    if rc != 0:
+        run(["systemctl", "enable", "--now", "--no-block", "ssh.service"])
+        log("SSH enabled (key only)")
+
+
+def apply_updates(s, mode):
+    on = s["AUTO_SECURITY_UPDATES"] == "yes"
+    write("/etc/apt/apt.conf.d/20auto-upgrades",
+          'APT::Periodic::Update-Package-Lists "%d";\nAPT::Periodic::Unattended-Upgrade "%d";\n'
+          % (on, on))
+    # Free mode: Debian security plus the Raspberry Pi archive, where Chromium
+    # comes from. RDS mode: Debian security only. Never the kernel, firmware
+    # or bootloader (no unattended reboots into an untested kernel), and never
+    # rds-agent: agent updates are the customer's decision, made in RDS.
+    origins = ['"origin=Debian,codename=${distro_codename}-security,label=Debian-Security";']
+    if mode == "free":
+        origins.append('"origin=Raspberry Pi Foundation,codename=${distro_codename}";')
+    write("/etc/apt/apt.conf.d/52rds-pi-kiosk",
+          "// Written by rds-kiosk-apply (AUTO_SECURITY_UPDATES in kiosk.txt)\n"
+          "Unattended-Upgrade::Origins-Pattern {\n  %s\n};\n"
+          "Unattended-Upgrade::Package-Blacklist {\n"
+          '  "rds-agent"; "linux-image-"; "linux-headers-"; "linux-kbuild-";\n'
+          '  "raspi-firmware"; "rpi-eeprom"; "raspberrypi-sys-mods";\n};\n'
+          'Unattended-Upgrade::Automatic-Reboot "false";\n' % "\n  ".join(origins))
+
+
+def apply_setup_code(s):
+    code = s["SETUP_CODE"] or read(CODE_FILE)
+    if not code or kc.validate("SETUP_CODE", code):
+        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
+        log("generated a new setup code")
+    if read(CODE_FILE) != code:
+        write(CODE_FILE, code + "\n", 0o640, ("root", "kiosk-setup"))
+
+
+def effective_mode(s):
+    if s["MODE"] == "rds" and agent_installed():
+        return "rds"
+    return "free"
+
+
+def write_runtime(s, warnings, mode):
+    os.makedirs(RUN, exist_ok=True)
+    os.chmod(RUN, 0o755)
+    env = "".join("%s=%s\n" % (k, shlex.quote(s[k])) for k in ("URL", "ROTATION", "ZOOM"))
+    write(RUN + "/session.env", env)
+    st = kc.public_view(s)
+    st.update({
+        "mode": mode,
+        "agent_installed": agent_installed(),
+        "hostname": read("/etc/hostname"),
+        "version": read(VERSION_FILE, "dev"),
+        "warnings": warnings[:20],
+    })
+    write(RUN + "/state.json", json.dumps(st, indent=1) + "\n")
+    write(MODE_FILE, mode + "\n")
+
+
+def pair_status(state, message):
+    write(PAIR_STATUS, json.dumps({"state": state, "message": message,
+                                   "ts": int(time.time())}) + "\n")
+
+
+def maybe_queue_pair(s):
+    if s["MODE"] == "rds" and not agent_installed():
+        rc, _ = run(["systemctl", "is-active", "--quiet", "rds-kiosk-pair.service"])
+        if rc != 0:
+            pair_status("queued", "Waiting for the network to install the RDS agent")
+            run(["systemctl", "start", "--no-block", "rds-kiosk-pair.service"])
+            log("MODE=rds and no agent yet: pairing queued")
+
+
+# ── entry points ───────────────────────────────────────────────────────────
+
+def boot():
+    step("kiosk.txt", ensure_kiosk_txt)
+    s, warnings = kc.effective()
+    for w in warnings:
+        log("kiosk.txt " + w)
+    mode = effective_mode(s)
+    step("hostname", apply_hostname, s)
+    step("timezone", apply_timezone, s)
+    step("wifi-country", apply_wifi_country, s)
+    step("wifi", apply_wifi, s)
+    step("ssh", apply_ssh_key, s)
+    step("updates", apply_updates, s, mode)
+    step("setup-code", apply_setup_code, s)
+    step("runtime", write_runtime, s, warnings, mode)
+    step("last-good", kc.save_last_good, s)
+    if not os.path.exists(PAIR_STATUS):
+        step("pair-status", pair_status, "idle", "")
+    step("pair", maybe_queue_pair, s)
+    log("applied: mode=%s url=%s rotation=%s" % (mode, "set" if s["URL"] else "none", s["ROTATION"]))
+
+
+def requests():
+    files = sorted(glob.glob(REQUESTS + "/*.json"))[:20]
+    restart = pair = False
+    for path in files:
+        try:
+            if os.path.getsize(path) > 16384:
+                raise ValueError("too large")
+            with open(path) as f:
+                req = json.load(f)
+        except (OSError, ValueError) as e:
+            log("bad request %s: %s" % (os.path.basename(path), e))
+            req = None
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        if not isinstance(req, dict):
+            continue
+        kind = req.get("type")
+        if kind == "settings":
+            vals = req.get("values")
+            if not isinstance(vals, dict):
+                continue
+            upd = {}
+            for k, v in vals.items():
+                if k in kc.WEB_EDITABLE and isinstance(v, str):
+                    v = kc._normalise(k, v.strip())
+                    if kc.validate(k, v) is None:
+                        upd[k] = v
+                    else:
+                        log("setup page sent an invalid %s (ignored)" % k)
+            if upd:
+                try:
+                    kc.set_values(upd, comment="Changed on the setup page on %s." % time.strftime("%Y-%m-%d %H:%M"))
+                    log("setup page changed %s" % ", ".join(sorted(upd)))
+                    restart = True
+                except (OSError, ValueError) as e:
+                    log("could not save the setup page's change: %s" % e)
+        elif kind == "pair":
+            pair = True
+        elif kind == "reload":
+            restart = True
+    if restart:
+        s, warnings = kc.effective()
+        mode = effective_mode(s)
+        write_runtime(s, warnings, mode)
+        kc.save_last_good(s)
+        if mode == "free":
+            run(["systemctl", "restart", "--no-block", "rds-kiosk.service"])
+    if pair:
+        rc, _ = run(["systemctl", "is-active", "--quiet", "rds-kiosk-pair.service"])
+        if rc != 0:
+            pair_status("queued", "Starting")
+            run(["systemctl", "start", "--no-block", "rds-kiosk-pair.service"])
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if os.geteuid() != 0:
+        sys.exit("rds-kiosk-apply: must run as root")
+    if cmd == "boot":
+        boot()
+    elif cmd == "requests":
+        requests()
+    else:
+        sys.exit("usage: rds-kiosk-apply boot|requests")
+
+
+if __name__ == "__main__":
+    main()

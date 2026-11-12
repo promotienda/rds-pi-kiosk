@@ -1,0 +1,12 @@
+cage
+wlr-randr
+chromium
+python3
+qrencode
+unattended-upgrades
+pipewire
+pipewire-pulse
+wireplumber
+fonts-liberation2
+fonts-noto-color-emoji
+fonts-dejavu-core

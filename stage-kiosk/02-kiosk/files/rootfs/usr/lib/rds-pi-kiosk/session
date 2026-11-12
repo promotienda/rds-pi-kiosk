@@ -1,0 +1,48 @@
+#!/bin/sh
+# The free-mode kiosk session. cage (rds-kiosk.service) runs this as the
+# unprivileged "kiosk" user; when it exits, cage exits and systemd restarts both.
+ENV=/run/rds-pi-kiosk/session.env
+URL=""; ROTATION=0; ZOOM=1.0
+# shellcheck disable=SC1090
+[ -r "$ENV" ] && . "$ENV"
+
+# Rotation and zoom, on every output cage drives. Zoom is the output scale:
+# Chromium's --force-device-scale-factor draws its window at the wrong size
+# under cage (seen at 1.25: a quarter-size window).
+for out in $(wlr-randr 2>/dev/null | awk '/^[^ ]/{print $1}'); do
+  case "$ROTATION" in 90|180|270) wlr-randr --output "$out" --transform "$ROTATION" || true ;; esac
+  case "$ZOOM" in 1|1.0|1.00|"") ;; *) wlr-randr --output "$out" --scale "$ZOOM" || true ;; esac
+done
+
+# Start on the local start page, which waits for the network and shows the
+# setup address. If the setup service is not answering, go straight to the
+# URL (or the offline note): the screen must never wait on a helper.
+START=""
+i=0
+while [ $i -lt 20 ]; do
+  if curl -fsS -m 1 -o /dev/null http://localhost/healthz 2>/dev/null; then
+    START="http://localhost/start"; break
+  fi
+  i=$((i + 1)); sleep 0.5
+done
+if [ -z "$START" ]; then
+  if [ -n "$URL" ]; then START="$URL"; else START="file:///usr/share/rds-pi-kiosk/www/offline.html"; fi
+fi
+
+# Never show "Chromium didn't shut down correctly" after a power cut.
+PREFS="$HOME/.config/chromium/Default/Preferences"
+if [ -f "$PREFS" ]; then
+  sed -i 's/"exited_cleanly":false/"exited_cleanly":true/; s/"exit_type":"[^"]*"/"exit_type":"Normal"/' "$PREFS" 2>/dev/null || true
+fi
+
+exec chromium \
+  --kiosk --start-fullscreen \
+  --ozone-platform=wayland \
+  --noerrdialogs --disable-infobars --no-first-run --no-default-browser-check \
+  --disable-session-crashed-bubble --hide-crash-restore-bubble \
+  --disable-features=Translate,TranslateUI,MediaRouter,DialMediaRouteProvider \
+  --password-store=basic \
+  --autoplay-policy=no-user-gesture-required \
+  --check-for-update-interval=31536000 \
+  --overscroll-history-navigation=0 --disable-pinch \
+  "$START"

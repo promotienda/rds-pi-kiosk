@@ -1,0 +1,6 @@
+[Unit]
+Description=RDS Pi Kiosk: apply setup page requests
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/rds-kiosk-apply requests

@@ -1,0 +1,16 @@
+gstreamer1.0-plugins-base
+gstreamer1.0-plugins-good
+gstreamer1.0-plugins-bad
+gstreamer1.0-libav
+gstreamer1.0-gl
+gstreamer1.0-alsa
+alsa-utils
+iproute2
+xserver-xorg
+xserver-xorg-input-libinput
+xinit
+x11-xserver-utils
+fonts-dejavu-core
+ca-certificates
+libwebkit2gtk-4.1-0
+libgtk-3-0t64
