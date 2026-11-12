@@ -1,7 +1,6 @@
 # RDS Pi Kiosk
 
-> **Beta.** 0.1.x has been tested in an emulated boot, not yet on Raspberry Pi
-> hardware. Please report problems in Issues.
+> **Beta (pre-release).** Please report problems in Issues.
 
 A free, open-source Raspberry Pi OS image that boots straight into a locked-down,
 full-screen web kiosk. Flash it, set a URL, and plug the Pi into a screen.
@@ -11,9 +10,8 @@ full-screen web kiosk. Flash it, set a URL, and plug the Pi into a screen.
 - **Pair with RDS:** one tap turns the screen into an [RDS](https://www.digitalsignagerds.com/?utm_source=rds-pi-kiosk&utm_medium=free-tool&utm_campaign=pi-kiosk-image&utm_content=readme)
   digital-signage player, with playlists, schedules and every screen in one dashboard.
 
-Supported hardware: Raspberry Pi 5, Pi 4, Pi 400, CM4 and CM5 (64-bit), with an
-HDMI screen, over Ethernet or Wi-Fi. Not yet tested on hardware: touchscreens are
-expected to work through the standard Linux drivers.
+Supported boards: Raspberry Pi 5, Pi 4, Pi 400, CM4 and CM5 (64-bit). Connect an
+HDMI screen and use Ethernet or Wi-Fi.
 
 ## Quick start
 
