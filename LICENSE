@@ -20,9 +20,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-This licence covers the build scripts and files in this repository. The
-images built from them contain Raspberry Pi OS and Debian packages, each under
-its own licence (see /usr/share/doc/*/copyright in the image). pi-gen is
-BSD-3-Clause. The RDS agent is not part of this repository or of the image;
-it is downloaded from RDS, under RDS's terms, only when you choose
-"Pair with RDS".

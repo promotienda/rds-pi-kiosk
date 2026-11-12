@@ -131,8 +131,11 @@ first. The output, `deploy/rds-pi-kiosk-<version>-arm64.img.xz`, comes with
 
 ## Licence
 
-MIT for this repository (see `LICENSE`). Images contain Raspberry Pi OS and
-Debian packages under their own licences.
+MIT for the build scripts and files in this repository (see `LICENSE`).
+Images built from them contain Raspberry Pi OS and Debian packages, each under
+its own licence (see `/usr/share/doc/*/copyright` in the image). pi-gen is
+BSD-3-Clause. The RDS agent is not part of this repository or of the image: it
+is downloaded from RDS, under RDS's terms, only when you choose "Pair with RDS".
 
 Raspberry Pi is a trademark of Raspberry Pi Ltd. This project is not affiliated
 with or endorsed by Raspberry Pi Ltd.
