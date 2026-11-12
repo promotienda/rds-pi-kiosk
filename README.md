@@ -11,8 +11,9 @@ full-screen web kiosk. Flash it, set a URL, and plug the Pi into a screen.
 - **Pair with RDS:** one tap turns the screen into an [RDS](https://www.digitalsignagerds.com/?utm_source=rds-pi-kiosk&utm_medium=free-tool&utm_campaign=pi-kiosk-image&utm_content=readme)
   digital-signage player, with playlists, schedules and every screen in one dashboard.
 
-Supported hardware: Raspberry Pi 5, Pi 4, Pi 400, CM4 and CM5 (64-bit). Any HDMI
-screen works, and touchscreens work too. You can use Ethernet or Wi-Fi.
+Supported hardware: Raspberry Pi 5, Pi 4, Pi 400, CM4 and CM5 (64-bit), with an
+HDMI screen, over Ethernet or Wi-Fi. Not yet tested on hardware: touchscreens are
+expected to work through the standard Linux drivers.
 
 ## Quick start
 
@@ -50,7 +51,7 @@ the screen off.
 | `SETUP_PAGE` | `on` | `off` = no setup page on the network |
 | `SETUP_CODE` | random | your own 6–32 letters/digits |
 | `SSH_AUTHORIZED_KEY` | | one OpenSSH public key: enables key-only SSH for `kioskadmin` |
-| `AUTO_SECURITY_UPDATES` | `yes` | security updates, never an automatic reboot |
+| `AUTO_SECURITY_UPDATES` | `yes` | automatic updates (see Security notes), never an automatic reboot |
 
 ## Pair with RDS
 
@@ -90,9 +91,11 @@ Security notes:
 - No account has a usable password unless you create one in Raspberry Pi Imager
   or set `SSH_AUTHORIZED_KEY`. tty1 belongs to the kiosk, and VT switching is off.
 - A hardware watchdog reboots the Pi if the system hangs.
-- Security updates install automatically: Debian security, plus Chromium from
-  the Raspberry Pi archive in free mode. They never touch the kernel, the
-  firmware, the bootloader or the RDS agent, and never reboot the Pi.
+- Updates install automatically. In free mode that means Debian security
+  updates and the Raspberry Pi archive (all of it, including Chromium, not only
+  security fixes). Once paired with RDS it means Debian security updates only.
+  They never touch the kernel, the firmware, the bootloader or the RDS agent,
+  and never reboot the Pi. `AUTO_SECURITY_UPDATES=no` in `kiosk.txt` turns them off.
 
 ## Verifying a download
 
