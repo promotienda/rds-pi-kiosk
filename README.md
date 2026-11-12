@@ -94,8 +94,9 @@ Security notes:
 - Updates install automatically. In free mode that means Debian security
   updates and the Raspberry Pi archive (all of it, including Chromium, not only
   security fixes). Once paired with RDS it means Debian security updates only.
-  They never touch the kernel, the firmware, the bootloader or the RDS agent,
-  and never reboot the Pi. `AUTO_SECURITY_UPDATES=no` in `kiosk.txt` turns them off.
+  They never touch the kernel, the boot firmware or bootloader, or the RDS
+  agent, and never reboot the Pi. Wi-Fi/Bluetooth firmware may update like any
+  other package. `AUTO_SECURITY_UPDATES=no` in `kiosk.txt` turns them off.
 
 ## Verifying a download
 
